@@ -1,4 +1,4 @@
-**Title:** [FEATURE] strands-vision-decider: image input for Strands Decider (v19), no retraining needed
+**Title:** [FEATURE] Image input for Strands Decider (v19), no retraining needed
 
 **Area:** inference (strands-decider ask / strands-decider serve)
 
