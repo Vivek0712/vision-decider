@@ -6,7 +6,9 @@
 
 ### Human Overview
 
-Also I wanted to train the fine-tuned model. The numbers proved it.
+I’m proud of this result because it surfaces a failure mode that headline accuracy alone would have hidden. v19 looks confident even when the image is missing, and the paired-question results show that the model still has a real grounding problem. More importantly, the comparison with untrained Qwen suggests our own text training may have amplified that behavior.
+
+I don’t want to train around the result after seeing it. I want us to agree upfront on what success means, lock the evaluation and thresholds, and then see whether a new image checkpoint can genuinely clear that bar. If it does, we can say with confidence that we fixed something measurable rather than just produced another checkpoint.
 
 ### Problem Statement
 
