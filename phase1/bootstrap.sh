@@ -29,8 +29,11 @@ trap finish EXIT
 
 python3 -m venv /opt/vd && . /opt/vd/bin/activate
 pip install -q --upgrade pip
-pip install -q torch --index-url https://download.pytorch.org/whl/cpu
-pip install -q "transformers==5.18.0" "peft==0.21.2" accelerate pillow pyyaml fastapi uvicorn safetensors datasets huggingface_hub pandas pyarrow
+# Pinned to the environment the CPU test suite passed in. torchvision is required:
+# the Qwen3.5 processor also loads its video processor.
+pip install -q "torch==2.14.1" "torchvision==0.29.1" --index-url https://download.pytorch.org/whl/cpu
+pip install -q "transformers==5.18.0" "peft==0.21.2" "accelerate==1.15.0" "huggingface_hub==1.33.0" \
+  "tokenizers==0.23.2" jinja2 pillow pyyaml fastapi uvicorn safetensors pandas pyarrow
 git clone -q https://github.com/strands-labs/strands-decider /opt/strands-decider
 git -C /opt/strands-decider checkout -q $UPSTREAM_SHA
 pip install -q -e /opt/strands-decider
@@ -41,4 +44,7 @@ python -c "import torch, transformers; print('torch', torch.__version__, 'thread
 lscpu | grep -E 'Model name|^CPU\(s\)|amx' | head -5 || true
 
 cd /opt/vision-decider
+# Preflight: every system on a handful of items, so a load or format error stops the
+# run in minutes instead of after hours.
+python -m phase1.run --out /opt/run/preflight --nb-groups 1 --pope 2
 python -m phase1.run --out /opt/run/results $ARGS
