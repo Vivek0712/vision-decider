@@ -1,0 +1,256 @@
+{
+  "meta": {
+    "args": {
+      "out": "/opt/run/results",
+      "nb_groups": 300,
+      "pope": 600,
+      "systems": "strands",
+      "base": "Qwen/Qwen3.5-2B-Base",
+      "dtype": "bfloat16",
+      "long_side": 448,
+      "batch": 4,
+      "nb_local": null,
+      "pope_local": null,
+      "ijb_jsonl": "/opt/ijb/ijb_preview.jsonl"
+    },
+    "items": 1928,
+    "started": "2026-10-02 09:02:54",
+    "strands_minutes": 41.6
+  },
+  "errors": {},
+  "scores": {
+    "strands-v19": {
+      "naturalbench": {
+        "all": {
+          "n": 1200,
+          "accuracy": 0.7817,
+          "brier": 0.3067,
+          "ece": 0.0106,
+          "mean_confidence": 0.7768
+        },
+        "noul": {
+          "n": 908,
+          "accuracy": 0.7687,
+          "brier": 0.324,
+          "ece": 0.0239,
+          "mean_confidence": 0.7587
+        },
+        "choice": {
+          "n": 292,
+          "accuracy": 0.8219,
+          "brier": 0.2528,
+          "ece": 0.0306,
+          "mean_confidence": 0.8331
+        },
+        "paired": {
+          "groups": 300,
+          "q_acc": 0.5733,
+          "i_acc": 0.605,
+          "g_acc": 0.3233
+        }
+      },
+      "pope_adversarial": {
+        "all": {
+          "n": 600,
+          "accuracy": 0.8717,
+          "brier": 0.203,
+          "ece": 0.0699,
+          "mean_confidence": 0.8044
+        },
+        "noul": {
+          "n": 600,
+          "accuracy": 0.8717,
+          "brier": 0.203,
+          "ece": 0.0699,
+          "mean_confidence": 0.8044
+        }
+      },
+      "ijb_preview": {
+        "all": {
+          "n": 128,
+          "accuracy": 0.4297,
+          "brier": 0.677,
+          "ece": 0.0904,
+          "mean_confidence": 0.5146
+        },
+        "choice": {
+          "n": 128,
+          "accuracy": 0.4297,
+          "brier": 0.677,
+          "ece": 0.0904,
+          "mean_confidence": 0.5146
+        },
+        "exact_only": {
+          "n": 60,
+          "accuracy": 0.6333,
+          "brier": 0.4842,
+          "ece": 0.1353,
+          "mean_confidence": 0.6003
+        },
+        "by_dataset": {
+          "ArxivQA": {
+            "n": 20,
+            "accuracy": 0.6,
+            "brier": 0.5753,
+            "ece": 0.254,
+            "mean_confidence": 0.6491
+          },
+          "CLEVR-HOPE": {
+            "n": 20,
+            "accuracy": 0.85,
+            "brier": 0.2198,
+            "ece": 0.1902,
+            "mean_confidence": 0.7336
+          },
+          "FinQA": {
+            "n": 20,
+            "accuracy": 0.15,
+            "brier": 0.8359,
+            "ece": 0.2898,
+            "mean_confidence": 0.4398
+          },
+          "Geometry3K": {
+            "n": 20,
+            "accuracy": 0.45,
+            "brier": 0.6576,
+            "ece": 0.1209,
+            "mean_confidence": 0.4181
+          },
+          "Multimodal-Mind2Web": {
+            "n": 12,
+            "accuracy": 0.25,
+            "brier": 0.819,
+            "ece": 0.0732,
+            "mean_confidence": 0.3232
+          },
+          "ScreenSpot": {
+            "n": 36,
+            "accuracy": 0.3056,
+            "brier": 0.8627,
+            "ece": 0.1756,
+            "mean_confidence": 0.4773
+          }
+        }
+      },
+      "image_dependence": {
+        "n": 1928,
+        "mean_tv_distance": 0.2719,
+        "mean_confidence_drop": 0.1078
+      }
+    },
+    "strands-v19-blind": {
+      "naturalbench": {
+        "all": {
+          "n": 1200,
+          "accuracy": 0.5,
+          "brier": 0.5612,
+          "ece": 0.1524,
+          "mean_confidence": 0.6524
+        },
+        "noul": {
+          "n": 908,
+          "accuracy": 0.5,
+          "brier": 0.5553,
+          "ece": 0.1489,
+          "mean_confidence": 0.6489
+        },
+        "choice": {
+          "n": 292,
+          "accuracy": 0.5,
+          "brier": 0.5794,
+          "ece": 0.1635,
+          "mean_confidence": 0.6635
+        },
+        "paired": {
+          "groups": 300,
+          "q_acc": 0.0,
+          "i_acc": 0.1033,
+          "g_acc": 0.0
+        }
+      },
+      "pope_adversarial": {
+        "all": {
+          "n": 600,
+          "accuracy": 0.5,
+          "brier": 0.599,
+          "ece": 0.2245,
+          "mean_confidence": 0.7245
+        },
+        "noul": {
+          "n": 600,
+          "accuracy": 0.5,
+          "brier": 0.599,
+          "ece": 0.2245,
+          "mean_confidence": 0.7245
+        }
+      },
+      "ijb_preview": {
+        "all": {
+          "n": 128,
+          "accuracy": 0.2656,
+          "brier": 0.7742,
+          "ece": 0.1661,
+          "mean_confidence": 0.4314
+        },
+        "choice": {
+          "n": 128,
+          "accuracy": 0.2656,
+          "brier": 0.7742,
+          "ece": 0.1661,
+          "mean_confidence": 0.4314
+        },
+        "exact_only": {
+          "n": 60,
+          "accuracy": 0.35,
+          "brier": 0.6827,
+          "ece": 0.1566,
+          "mean_confidence": 0.5066
+        },
+        "by_dataset": {
+          "ArxivQA": {
+            "n": 20,
+            "accuracy": 0.3,
+            "brier": 0.7751,
+            "ece": 0.2841,
+            "mean_confidence": 0.4798
+          },
+          "CLEVR-HOPE": {
+            "n": 20,
+            "accuracy": 0.65,
+            "brier": 0.4405,
+            "ece": 0.0689,
+            "mean_confidence": 0.6373
+          },
+          "FinQA": {
+            "n": 20,
+            "accuracy": 0.15,
+            "brier": 0.8732,
+            "ece": 0.3346,
+            "mean_confidence": 0.4846
+          },
+          "Geometry3K": {
+            "n": 20,
+            "accuracy": 0.1,
+            "brier": 0.8326,
+            "ece": 0.3028,
+            "mean_confidence": 0.4028
+          },
+          "Multimodal-Mind2Web": {
+            "n": 12,
+            "accuracy": 0.25,
+            "brier": 0.8241,
+            "ece": 0.0374,
+            "mean_confidence": 0.2874
+          },
+          "ScreenSpot": {
+            "n": 36,
+            "accuracy": 0.1944,
+            "brier": 0.8552,
+            "ece": 0.2033,
+            "mean_confidence": 0.3245
+          }
+        }
+      }
+    }
+  }
+}

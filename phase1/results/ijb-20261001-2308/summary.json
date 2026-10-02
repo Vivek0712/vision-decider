@@ -1,0 +1,316 @@
+{
+  "meta": {
+    "args": {
+      "out": "/opt/run/results",
+      "nb_groups": 0,
+      "pope": 0,
+      "systems": "qwen,mapika",
+      "base": "Qwen/Qwen3.5-2B-Base",
+      "dtype": "bfloat16",
+      "long_side": 448,
+      "batch": 4,
+      "nb_local": null,
+      "pope_local": null,
+      "ijb_jsonl": "/opt/ijb/ijb_preview.jsonl"
+    },
+    "items": 128,
+    "started": "2026-10-02 06:12:06",
+    "qwen_minutes": 4.6,
+    "mapika_minutes": 8.0
+  },
+  "errors": {},
+  "scores": {
+    "qwen-untrained": {
+      "ijb_preview": {
+        "all": {
+          "n": 128,
+          "accuracy": 0.3672,
+          "brier": 0.7608,
+          "ece": 0.1688,
+          "mean_confidence": 0.536
+        },
+        "choice": {
+          "n": 128,
+          "accuracy": 0.3672,
+          "brier": 0.7608,
+          "ece": 0.1688,
+          "mean_confidence": 0.536
+        },
+        "exact_only": {
+          "n": 60,
+          "accuracy": 0.4833,
+          "brier": 0.6402,
+          "ece": 0.1384,
+          "mean_confidence": 0.6079
+        },
+        "by_dataset": {
+          "ArxivQA": {
+            "n": 20,
+            "accuracy": 0.45,
+            "brier": 0.7509,
+            "ece": 0.2474,
+            "mean_confidence": 0.5674
+          },
+          "CLEVR-HOPE": {
+            "n": 20,
+            "accuracy": 0.85,
+            "brier": 0.2529,
+            "ece": 0.1373,
+            "mean_confidence": 0.781
+          },
+          "FinQA": {
+            "n": 20,
+            "accuracy": 0.3,
+            "brier": 0.8991,
+            "ece": 0.3758,
+            "mean_confidence": 0.535
+          },
+          "Geometry3K": {
+            "n": 20,
+            "accuracy": 0.15,
+            "brier": 0.9168,
+            "ece": 0.3254,
+            "mean_confidence": 0.4754
+          },
+          "Multimodal-Mind2Web": {
+            "n": 12,
+            "accuracy": 0.25,
+            "brier": 0.8372,
+            "ece": 0.1663,
+            "mean_confidence": 0.3772
+          },
+          "ScreenSpot": {
+            "n": 36,
+            "accuracy": 0.25,
+            "brier": 0.8594,
+            "ece": 0.2374,
+            "mean_confidence": 0.4695
+          }
+        }
+      },
+      "image_dependence": {
+        "n": 128,
+        "mean_tv_distance": 0.202,
+        "mean_confidence_drop": 0.0887
+      }
+    },
+    "qwen-untrained-blind": {
+      "ijb_preview": {
+        "all": {
+          "n": 128,
+          "accuracy": 0.2812,
+          "brier": 0.811,
+          "ece": 0.173,
+          "mean_confidence": 0.4473
+        },
+        "choice": {
+          "n": 128,
+          "accuracy": 0.2812,
+          "brier": 0.811,
+          "ece": 0.173,
+          "mean_confidence": 0.4473
+        },
+        "exact_only": {
+          "n": 60,
+          "accuracy": 0.3167,
+          "brier": 0.7541,
+          "ece": 0.1805,
+          "mean_confidence": 0.4823
+        },
+        "by_dataset": {
+          "ArxivQA": {
+            "n": 20,
+            "accuracy": 0.25,
+            "brier": 0.81,
+            "ece": 0.2312,
+            "mean_confidence": 0.4518
+          },
+          "CLEVR-HOPE": {
+            "n": 20,
+            "accuracy": 0.55,
+            "brier": 0.4934,
+            "ece": 0.0097,
+            "mean_confidence": 0.5403
+          },
+          "FinQA": {
+            "n": 20,
+            "accuracy": 0.35,
+            "brier": 0.8617,
+            "ece": 0.3283,
+            "mean_confidence": 0.5427
+          },
+          "Geometry3K": {
+            "n": 20,
+            "accuracy": 0.15,
+            "brier": 0.9589,
+            "ece": 0.3748,
+            "mean_confidence": 0.4547
+          },
+          "Multimodal-Mind2Web": {
+            "n": 12,
+            "accuracy": 0.25,
+            "brier": 0.8595,
+            "ece": 0.1832,
+            "mean_confidence": 0.4332
+          },
+          "ScreenSpot": {
+            "n": 36,
+            "accuracy": 0.1944,
+            "brier": 0.8615,
+            "ece": 0.1461,
+            "mean_confidence": 0.3406
+          }
+        }
+      }
+    },
+    "mapika": {
+      "ijb_preview": {
+        "all": {
+          "n": 128,
+          "accuracy": 0.5312,
+          "brier": 0.562,
+          "ece": 0.1551,
+          "mean_confidence": 0.6703
+        },
+        "choice": {
+          "n": 128,
+          "accuracy": 0.5312,
+          "brier": 0.562,
+          "ece": 0.1551,
+          "mean_confidence": 0.6703
+        },
+        "exact_only": {
+          "n": 60,
+          "accuracy": 0.6333,
+          "brier": 0.4542,
+          "ece": 0.1906,
+          "mean_confidence": 0.7491
+        },
+        "by_dataset": {
+          "ArxivQA": {
+            "n": 20,
+            "accuracy": 0.55,
+            "brier": 0.5953,
+            "ece": 0.2979,
+            "mean_confidence": 0.7464
+          },
+          "CLEVR-HOPE": {
+            "n": 20,
+            "accuracy": 0.9,
+            "brier": 0.1233,
+            "ece": 0.1247,
+            "mean_confidence": 0.9135
+          },
+          "FinQA": {
+            "n": 20,
+            "accuracy": 0.3,
+            "brier": 0.7787,
+            "ece": 0.1336,
+            "mean_confidence": 0.4336
+          },
+          "Geometry3K": {
+            "n": 20,
+            "accuracy": 0.45,
+            "brier": 0.6439,
+            "ece": 0.3757,
+            "mean_confidence": 0.5874
+          },
+          "Multimodal-Mind2Web": {
+            "n": 12,
+            "accuracy": 0.0833,
+            "brier": 0.8741,
+            "ece": 0.2904,
+            "mean_confidence": 0.3737
+          },
+          "ScreenSpot": {
+            "n": 36,
+            "accuracy": 0.6389,
+            "brier": 0.5175,
+            "ece": 0.1999,
+            "mean_confidence": 0.7692
+          }
+        },
+        "official_agreement": {
+          "ours_correct": 68,
+          "official_correct": 55,
+          "item_agreement": 0.7422,
+          "item_agreement_exact": 0.95
+        }
+      },
+      "image_dependence": {
+        "n": 128,
+        "mean_tv_distance": 0.3765,
+        "mean_confidence_drop": 0.2774
+      }
+    },
+    "mapika-blind": {
+      "ijb_preview": {
+        "all": {
+          "n": 128,
+          "accuracy": 0.3359,
+          "brier": 0.7108,
+          "ece": 0.1024,
+          "mean_confidence": 0.3929
+        },
+        "choice": {
+          "n": 128,
+          "accuracy": 0.3359,
+          "brier": 0.7108,
+          "ece": 0.1024,
+          "mean_confidence": 0.3929
+        },
+        "exact_only": {
+          "n": 60,
+          "accuracy": 0.5,
+          "brier": 0.5934,
+          "ece": 0.15,
+          "mean_confidence": 0.5119
+        },
+        "by_dataset": {
+          "ArxivQA": {
+            "n": 20,
+            "accuracy": 0.55,
+            "brier": 0.6185,
+            "ece": 0.1197,
+            "mean_confidence": 0.4641
+          },
+          "CLEVR-HOPE": {
+            "n": 20,
+            "accuracy": 0.6,
+            "brier": 0.4698,
+            "ece": 0.272,
+            "mean_confidence": 0.6621
+          },
+          "FinQA": {
+            "n": 20,
+            "accuracy": 0.3,
+            "brier": 0.7851,
+            "ece": 0.0971,
+            "mean_confidence": 0.3541
+          },
+          "Geometry3K": {
+            "n": 20,
+            "accuracy": 0.35,
+            "brier": 0.6919,
+            "ece": 0.1359,
+            "mean_confidence": 0.4096
+          },
+          "Multimodal-Mind2Web": {
+            "n": 12,
+            "accuracy": 0.1667,
+            "brier": 0.8314,
+            "ece": 0.0978,
+            "mean_confidence": 0.2645
+          },
+          "ScreenSpot": {
+            "n": 36,
+            "accuracy": 0.1389,
+            "brier": 0.8249,
+            "ece": 0.1198,
+            "mean_confidence": 0.2587
+          }
+        }
+      }
+    }
+  }
+}
