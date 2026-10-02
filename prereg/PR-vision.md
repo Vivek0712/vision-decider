@@ -1,47 +1,41 @@
-**Title:** [FEATURE] Image input for Strands Decider (v19), no retraining needed
+**Title:** feat(vision): image input for Strands Decider (v19), vision tower kept, no retraining
 
-**Area:** inference (strands-decider ask / strands-decider serve)
+**Base:** `strands-labs/strands-decider:main` ← **Head:** `Vivek0712/strands-decider:feat/vision`
 
 ---
 
-### Human Overview
-
+## Human Overview
 <!-- Written by the author, in their own words (50 words). -->
 
-### Problem Statement
+## Description
 
-Strands Decider (v19) runs on Qwen3.5-2B-Base, which is natively multimodal, but `_load_torso` drops the vision tower, so it cannot decide anything about an image. Agents increasingly need cheap, calibrated decisions over what they see: a screenshot before a tool call, a scanned page before extraction, a photo in a support ticket. Today that means a generative VLM call, losing the single-pass latency and calibrated confidence that make the decider useful, or a separate image model with a different readout.
+**strands-vision-decider**: Strands Decider (v19) runs on Qwen3.5-2B-Base, which is natively multimodal, but `_load_torso` drops the vision tower. This PR keeps it behind `--vision`, so a request can carry images alongside `state`. No new weights: the published v19 adapter maps onto the same decoder inside the multimodal model (`layers.N` → `language_model.layers.N`), and the vision tower ships in the base checkpoint already (+0.7 GB in memory).
 
-### Proposed Solution
+- `serve --vision`, `ask --image`; `SystemOneRequest.images` (base64); state may be empty with images
+- Images go inside `<state>` as Qwen placeholders; encoded once and shared across questions; M-RoPE positions passed explicitly
+- A text-only engine refuses images (HTTP 422) instead of ignoring them; text requests are unchanged
+- `vision` extra (Pillow); needs transformers ≥ 5.18
 
-**strands-vision-decider**: keep the vision tower and put images inside `<state>`, with v19's adapter and head unchanged. No new weights.
+Measured with v19 as published: NaturalBench 78.2% (ECE 0.011), POPE-adversarial 87.2%, level with the image-trained Mapika/decider-2b-vision on accuracy and better calibrated on NaturalBench. Details below.
 
-- `serve --vision` / `ask --image`; requests gain an optional `images` list (base64)
-- The v19 adapter maps onto the same decoder inside the multimodal model (`layers.N` → `language_model.layers.N`)
-- Images are encoded once and shared across questions; M-RoPE positions passed explicitly (exact against a full forward to < 1e-5)
-- Text-only requests unchanged (v19 parity 9.8e-4); a text-only server refuses images with 422
+## Related Issues
 
-Measured as published, no image training: NaturalBench 78.2% (ECE 0.011), POPE-adversarial 87.2%, level with the image-trained Mapika/decider-2b-vision on accuracy and better calibrated on NaturalBench. Full benchmarks below.
+Follow-up (image fine-tune, preregistered): #<fine-tune issue, opened after this PR>
 
-Working implementation, tests and evaluation: [Vivek0712/strands-decider@feat/vision](https://github.com/strands-labs/strands-decider/compare/main...Vivek0712:strands-decider:feat/vision).
+## Type of Change
 
-### Use Case
+New feature
 
-- **Computer-use agents:** gate a click on a screenshot ("is the payment confirmed?", "which control next?") with a confidence to route on.
-- **Documents:** check a scanned page ("is the signature block filled in?") before an expensive LLM extraction.
-- **Guardrails and triage over images:** policy checks, damage or severity scores, with calibrated thresholds instead of parsed text.
+## Testing
 
-Same API, same confidence routing (act at 0.9, confirm at 0.5), one model for text and image decisions.
+- `tests/test_vision.py` (9 tests, offline; builds a tiny Qwen3.5 with a tokeniser carrying the vision tokens): text answers equal between text and vision engines; shared-prefix answers over one and two images equal a full forward to < 1e-5 (fails without the M-RoPE delta); no position state leaks from an image forward into a text request (fails without the reset); image routing and 422 at the API.
+- Full suite offline (`HF_HUB_OFFLINE=1`): 252 passed, 19 skipped. `ruff check .` passes. `mypy ./src`: no new errors from this PR (28 pre-existing on `main` with torch 2.14.1 / mypy 2.4).
+- Real checkpoint: v19 on the multimodal torso matches upstream's v19 on text prompts to 9.8e-4.
 
-### Alternative Solutions
+- [ ] I ran `pytest -q` locally (GPU tests skip automatically without CUDA)
+- [ ] I ran `ruff check .` and `mypy ./src` locally and both pass
 
-- **Caption, then decide:** a VLM describes the image and the text decider reads the caption. Two models, a generative step, and the caption decides what the decider can see.
-- **A separate image classifier:** fixed labels, no runtime option text, no calibration story.
-- **Mapika/decider-2b-vision:** an open image decider on the same base, but a letter-logit readout (capped options, position prior) and older text weights.
-
-Keeping the vision tower reuses everything the decider already validated.
-
-### Additional Context
+## Additional Details
 
 **Headline.** Three systems, each scored with the image and with it removed. Bold is the best of the three.
 
@@ -154,19 +148,15 @@ With `--vision`, a text-only request runs through the same decoder weights. On t
 - **Reproduce:** `evaluation/vision/run.py` on the branch; `evaluation/vision/results/` holds every per-item probability behind these tables. A 16-item spot check of the in-tree script against the recorded run: same answer on all 16, mean |Δp| 0.004 (fp32 against bf16).
 </details>
 
-<details>
-<summary>Proposed follow-up: an image fine-tune from v19 (preregistration draft)</summary>
+## Checklist
+- [ ] I have read the [CONTRIBUTING](../CONTRIBUTING.md) document
+- [ ] I have reviewed and understand every line of code in this PR, including any generated by AI tools, and I can explain why it works
+- [ ] My change is focused and reasonably small; I have split unrelated work into separate PRs
+- [ ] I have added any necessary tests that prove my fix is effective or my feature works
+- [ ] I have updated the documentation accordingly
+- [ ] My changes generate no new warnings
+- [ ] Any dependent changes have been merged and published
 
-Text training does not teach the two gaps above: paired reasoning (G-Acc) and losing confidence when the image is missing. The draft preregistration, in the form of `research/preregistrations/`, is at [PREREGISTRATION-v19-vision.md](https://github.com/Vivek0712/vision-decider/blob/phase1-baselines/prereg/PREREGISTRATION-v19-vision.md). It trains from v19 with the vision tower frozen, on licence-clean image rows (VQAv2 complementary pairs, GQA, PlotQA, rendered TabFact, EuroSAT, Open Images, KonIQ), image-removed KL-only copies, and a text replay. Its predictions, on the items above:
+----
 
-| # | Prediction | v19 today |
-|---|---|---|
-| 1 | NaturalBench G-Acc ≥ 0.383 and above Mapika; accuracy ≥ 0.802 | 0.323; 0.782 |
-| 2 | Image removed: mean confidence ≤ 0.58 and ECE ≤ 0.10 on NaturalBench and POPE; with the image, ECE ≤ 0.04 (NaturalBench) and ≤ 0.07 (POPE) | 0.652 / 0.152; 0.725 / 0.225 |
-| 3 | POPE ≥ 0.862; Image JevBench preview exact ≥ 35/60 | 0.872; 38/60 |
-| 4 | JevBench ≥ 163, ECE ≤ 0.07, Brier ≤ 0.36 | 167, 0.052, 0.342 |
-
-Thresholds, mix and naming are open for discussion. If the image checkpoint lands, what should it be called (e.g. `strands-decider-2B-hobson-v19-vision`)?
-</details>
-
-**One PR or two?** Happy to open this as one PR now (image input only), or hold it until the fine-tune is done so both land together. Whichever you prefer.
+By submitting this pull request, I confirm that you can use, modify, copy, and redistribute this contribution, under the terms of your choice.

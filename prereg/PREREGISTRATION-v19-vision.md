@@ -1,7 +1,6 @@
 # Pre-registration: vand san-vision, Strands Decider (v19) with images in the state
 
 Committed before training. Same discipline as v9-v20.
-
 > **Draft for the issue.** Fields marked **[fill before commit]** are the training-row
 > counts, fixed once the data is built; then this file is committed and frozen before
 > the first training step. The evaluation sets and baselines below are final: they are
