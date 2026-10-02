@@ -1,5 +1,5 @@
 # Vision Decider v1 recipe. Mirrors configs/train.yaml (the v19 text recipe) with the
-# vision additions. One 24 GB GPU: micro_batch 4 x accum 8 at a 448px bucket fits.
+# vision additions. Sized for one 48 GB L40S (g6e.2xlarge); not yet measured on a GPU.
 
 train_files:
   - data/vision/docvqa_yesno.jsonl        # noul: form and document checks
@@ -9,8 +9,9 @@ train_files:
   - data/vision/imagenet_options.jsonl    # choice: 5-30 runtime-defined labels
   - data/vision/ava_aesthetic.jsonl       # score: ordinal rubric
   - data/vision/chartqa_choice.jsonl      # choice: chart reading
-  - data/vision/ablation.jsonl            # text-only twins (data.add_ablations)
+  - data/vision/ablation.jsonl            # text-only twins (data.add_ablations), KL-only
 val_fraction: 0.03
+held_out_tasks: []             # whole task families kept out of train and val
 
 base_model: "Qwen/Qwen3.5-2B-Base"
 num_slots: 24
@@ -18,12 +19,13 @@ head_type: "pointer"
 pointer_dim: 256
 head_dropout: 0.05
 kl_frozen_weight: 0.3          # KL(frozen multimodal torso || student)
-kl_frozen_on_images: true      # set false per family if untrained accuracy is at chance
-teacher_file: ""               # data/teacher_vision_4b.jsonl once labelled (Qwen3.5-4B-Base)
+kl_only_weight: 1.0            # KL weight on ablation rows, their only loss
+kl_frozen_exclude_tasks: []    # task prefixes where the untrained torso is at chance (measure first)
+teacher_file: ""               # upstream format {"i", "probs"}; Qwen3.5-4B-Base once labelled
 teacher_weight: 1.0
 max_length: 4096
 
-image_long_side: 448           # fixed bucket; ~256 tokens for a 448x448 image at merge 2
+image_long_side: 448           # fixed bucket; 196 tokens for 448x448 (patch 16, merge 2)
 max_image_tokens: 640          # rows over this are dropped, never truncated
 lora_on_merger: false          # run 2: true, compare on the held-out families
 
@@ -42,10 +44,11 @@ weight_decay: 0.01
 warmup_ratio: 0.03
 max_grad_norm: 1.0
 gradient_checkpointing: true
-num_workers: 4
+eval_every: 500
 
 shuffle_options: true          # do not turn this off
 group_by_length: true
+length_group_mega: 50
 ordinal_smoothing: 0.1
 reverse_score_prob: 0.5
 

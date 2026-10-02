@@ -9,6 +9,12 @@ text only and never see pixels, exactly as in the text engine.
 Window budget order: question reserve first, then image tokens (fixed by the bucket),
 then state text cut from the front. An image that does not fit after the reserve is
 refused rather than cropped: a cropped image answers a different question.
+
+Positions are passed explicitly. Qwen3.5 uses M-RoPE: an image advances the three
+rotary axes by its grid size, not its token count, so text after an image sits at
+`token index + rope_delta` (negative). Left to itself, a suffix-only forward after a
+cached prefix builds positions from the full prefix+suffix mask (a shape error) and
+reads a `rope_deltas` left on the module by the previous request.
 """
 
 from __future__ import annotations
@@ -37,7 +43,7 @@ from strands_decider.prompting import RenderedQuestion, render_question
 from strands_decider.schema import Answer, Content, Question, SystemOneResponse, Usage
 
 from .collate import _load_image
-from .modeling import VisionDeciderModel
+from .modeling import VisionDeciderModel, mm_token_type_ids, qwen_base
 from .prompting import (
     VISION_END,
     VisionState,
@@ -49,12 +55,14 @@ from .prompting import (
 
 @dataclass
 class VisionEngineConfig(EngineConfig):
+    model_name: str = "vision-decider-0.1.0"
     image_long_side: int = 448
 
 
 class VisionDeciderEngine(SystemOneEngine):
     def __init__(self, model: VisionDeciderModel, cfg: VisionEngineConfig | None = None, *, device: str = "cuda"):
-        super().__init__(model, cfg or VisionEngineConfig(), device=device)  # type: ignore[arg-type]
+        # SystemOneEngine takes (model, config); the device lives on the config.
+        super().__init__(model, replace(cfg or VisionEngineConfig(), device=device))
         self.processor = AutoProcessor.from_pretrained(model.config.base_model)
         self.vcfg: VisionEngineConfig = self.cfg  # type: ignore[assignment]
 
@@ -106,12 +114,24 @@ class VisionDeciderEngine(SystemOneEngine):
         m = len(rendered)
         s, q, mm = self._fit_vision(state, [rq.text for rq in rendered])
         prefix_ids = torch.tensor([s], device=self.device)
+        P = prefix_ids.size(1)
+        text_pos = torch.arange(P, device=self.device).view(1, 1, -1)
+        extra: dict[str, Any] = {}
+        if mm:
+            tt = mm_token_type_ids(self.model.torso, prefix_ids)
+            mpos, delta_t = qwen_base(self.model.torso).get_rope_index(
+                prefix_ids, tt, image_grid_thw=mm["image_grid_thw"])
+            delta = int(delta_t.view(-1)[0])
+            extra = {"mm_token_type_ids": tt, **mm}
+        else:
+            mpos, delta = text_pos.expand(3, 1, -1), 0
         prefix_out = self.model.torso(
             input_ids=prefix_ids,
             attention_mask=torch.ones_like(prefix_ids),
+            position_ids=torch.cat([text_pos, mpos], dim=0),  # [4, 1, P]: text row + 3 M-RoPE rows
             use_cache=True,
             return_dict=True,
-            **mm,
+            **extra,
         )
         if m == 1:
             # Single question: forward the suffix against the batch-1 cache directly.
@@ -121,15 +141,18 @@ class VisionDeciderEngine(SystemOneEngine):
 
         suffix_ids, suffix_mask = self._pad(q)
         full_mask = torch.cat([
-            torch.ones(m, prefix_ids.size(1), dtype=suffix_mask.dtype, device=self.device), suffix_mask
+            torch.ones(m, P, dtype=suffix_mask.dtype, device=self.device), suffix_mask
         ], dim=1)
-        hidden = VisionDeciderModel.encode(self.model, suffix_ids, full_mask, past_key_values=cache)
+        st = (torch.arange(suffix_ids.size(1), device=self.device) + P).view(1, 1, -1).expand(1, m, -1)
+        suffix_pos = torch.cat([st, (st + delta).expand(3, m, -1)], dim=0)
+        hidden = VisionDeciderModel.encode(self.model, suffix_ids, full_mask, past_key_values=cache,
+                                           position_ids=suffix_pos)
         pooled = pool_last_token(hidden, full_mask).to(torch.float32)
         options = gather_options(hidden, self._option_idx(rendered, 0)).to(torch.float32)
         logits = apply_temperature(self.model.head(pooled, options), self._temperatures(kinds))
         n_slots = torch.tensor([rq.n_slots for rq in rendered], device=self.device)
         probs = masked_log_softmax(logits, n_slots).exp()
-        return probs, prefix_ids.size(1) + int(suffix_mask.sum().item())
+        return probs, P + int(suffix_mask.sum().item())
 
     # ---- public ------------------------------------------------------------
 
@@ -159,5 +182,4 @@ class VisionDeciderEngine(SystemOneEngine):
 
 def load_engine(path: str, *, device: str = "cuda", image_long_side: int = 448) -> VisionDeciderEngine:
     model = VisionDeciderModel.load(path)
-    model.to(device)
     return VisionDeciderEngine(model, VisionEngineConfig(image_long_side=image_long_side), device=device)
