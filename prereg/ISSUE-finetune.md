@@ -6,7 +6,7 @@
 
 ### Human Overview
 
-<!-- Written by the author, in their own words (50 words). -->
+Also I wanted to train the fine-tuned model. The numbers proved it.
 
 ### Problem Statement
 

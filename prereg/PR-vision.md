@@ -5,7 +5,7 @@
 ---
 
 ## Human Overview
-<!-- Written by the author, in their own words (50 words). -->
+I wanted to have image capabilities of decision model. The plan was to add the vision head to the Qwen and retrain it. And then I looked into it and saw the vision tower is already in the checkpoint, so I made the tweaks to have image capabilities.
 
 ## Description
 
