@@ -53,12 +53,29 @@ def _parquet(repo: str, filename: str, local: str | None):
 
 
 def _mc(question: str) -> tuple[str, list[tuple[str, str]]]:
-    """'stem?\\nOption: A:To the right; B:To the left;' -> stem, [(A, To the right), ...]."""
-    stem, _, opts = question.partition("Option:")
-    pairs = re.findall(r"([A-Z])\s*:\s*([^;]+);?", opts)
-    if len(pairs) < 2:
+    """Options out of a NaturalBench question. Shapes seen:
+    'stem?\nOption: A:To the right; B:To the left;'
+    'stem?\nOption: A: Noticeably curved. B: Slightly curved.'
+    'stem? A. Nothing happens. B. Something moves.'
+    Markers are taken in sequence (A, then B, ...) so a stray capital in an option
+    is never read as a new one.
+    """
+    region_start = question.find("Option:")
+    region_start = region_start + len("Option:") if region_start >= 0 else 0
+    marks: list[tuple[str, int, int]] = []
+    want = "A"
+    for m in re.finditer(r"(?:(?<=\s)|(?<=^)|(?<=;)|(?<=:))([A-H])\s*[:.]\s*", question[region_start:]):
+        if m.group(1) == want:
+            marks.append((want, region_start + m.start(), region_start + m.end()))
+            want = chr(ord(want) + 1)
+    if len(marks) < 2:
         raise ValueError(f"cannot parse options from {question!r}")
-    return stem.strip(), [(k, v.strip()) for k, v in pairs]
+    stem = question[: question.find("Option:")] if "Option:" in question else question[: marks[0][1]]
+    opts = []
+    for k, (name, _, end) in enumerate(marks):
+        stop = marks[k + 1][1] if k + 1 < len(marks) else len(question)
+        opts.append((name, question[end:stop].strip().rstrip(";").strip()))
+    return stem.strip(), opts
 
 
 def naturalbench(n_groups: int, local: str | None) -> Iterator[dict[str, Any]]:
