@@ -38,6 +38,7 @@ from phase1.metrics import image_dependence, naturalbench_paired, summarise
 NB_REPO, NB_FILE = "BaiqiL/NaturalBench", "data/train-00000-of-00003.parquet"
 POPE_REPO, POPE_FILE = "lmms-lab/POPE", "Full/adversarial-00000-of-00001.parquet"
 MAPIKA = "Mapika/decider-2b-vision"
+V19 = "StrandsAgents/strands-decider-2B-hobson-v19"
 # NaturalBench's fixed answer pattern (its official scorer hard-codes it too):
 # question k on image j -> column Image_j_Question_k.
 
@@ -155,6 +156,77 @@ class QwenUntrained:
         return [lp[r, : len(it["options"])].exp().tolist() for r, it in enumerate(items)]
 
 
+class StrandsV19:
+    """Strands Decider v19 (text-trained LoRA + pointer head) on the multimodal torso.
+
+    v19's adapter was trained on the text decoder alone (`layers.N...`); the decoder
+    inside the multimodal torso is the same weights under `language_model.layers.N...`,
+    so the adapter is remapped and loaded there, and the vision tower is kept. No image
+    training: this measures what Strands Decider does with an image as it stands.
+    Temperatures per question kind are applied exactly as its engine applies them.
+    """
+
+    name = "strands-v19"
+
+    def __init__(self, dtype: str, long_side: int, device: str = "cpu"):
+        from dataclasses import asdict
+
+        from huggingface_hub import snapshot_download
+        from peft import set_peft_model_state_dict
+        from safetensors.torch import load_file
+        from transformers import AutoProcessor, AutoTokenizer
+
+        from strands_decider.modeling import StrandsDeciderConfig, config_path, load_head_state
+        from vision_decider.collate import VisionCollator, VisionCollatorConfig
+        from vision_decider.modeling import VisionDeciderConfig, VisionDeciderModel
+
+        path = snapshot_download(V19)
+        base = StrandsDeciderConfig.from_json(config_path(path))
+        cfg = VisionDeciderConfig(**{**asdict(base), "torch_dtype": dtype, "image_long_side": long_side})
+        tok = AutoTokenizer.from_pretrained(path)
+        model = VisionDeciderModel(cfg, VisionDeciderModel._load_torso(cfg, None, None), tok)
+        model.attach_lora()
+        sd = load_file(os.path.join(path, "lora", "adapter_model.safetensors"))
+        remapped = {k.replace("base_model.model.layers.", "base_model.model.language_model.layers.", 1): v
+                    for k, v in sd.items()}
+        res = set_peft_model_state_dict(model.torso, remapped)
+        missing = [k for k in res.missing_keys if "lora_" in k]
+        if res.unexpected_keys or missing:
+            raise RuntimeError(f"v19 adapter did not map: unexpected {res.unexpected_keys[:3]} missing {missing[:3]}")
+        model.head.load_state_dict(load_head_state(path))
+        model.head.to(torch.float32)
+        self.model = model.to(device).eval()
+        self.temps = dict(base.temperature_by_kind)
+        self.t_default = base.temperature
+        self.coll = VisionCollator(AutoProcessor.from_pretrained(cfg.base_model), VisionCollatorConfig(
+            num_slots=24, max_length=4096, head_type="pointer", image_long_side=long_side,
+            max_image_tokens=4096), train=False)
+
+    @torch.no_grad()
+    def probs(self, items: list[dict[str, Any]], blind: bool) -> list[list[float]]:
+        from strands_decider.modeling import masked_log_softmax
+        from strands_decider.prompting import NOUL_DEFAULT_CRITERIA
+        from vision_decider.data import VisionExample
+
+        rows = []
+        for it in items:
+            # noul as Strands serves it: default criteria; slot order false, true.
+            opts = ([["false", NOUL_DEFAULT_CRITERIA["false"]], ["true", NOUL_DEFAULT_CRITERIA["true"]]]
+                    if it["kind"] == "noul" else [[n, d] for n, d in it["options"]])
+            rows.append(VisionExample(kind=it["kind"], state="", instructions=it["question"], options=opts,
+                                      label=it["gold"], task=it["bench"],
+                                      images=[] if blind else [_pil(it["image"])]))
+        b = self.coll(rows)
+        if b is None or b["row_index"].numel() != len(rows):
+            raise RuntimeError("collator dropped rows; raise max_length")
+        out = self.model(b["input_ids"], b["attention_mask"], b["n_slots"], opt_idx=b["opt_idx"],
+                         temperature=1.0, pixel_values=b.get("pixel_values"),
+                         image_grid_thw=b.get("image_grid_thw"))
+        t = torch.tensor([self.temps.get(it["kind"], self.t_default) for it in items]).view(-1, 1)
+        p = masked_log_softmax(out["logits"].float() / t, b["n_slots"]).exp()
+        return [p[r, : len(it["options"])].tolist() for r, it in enumerate(items)]
+
+
 class Mapika:
     """Mapika/decider-2b-vision through its own code (one image per item, <= 10 options)."""
 
@@ -259,7 +331,7 @@ def main() -> None:
     ap.add_argument("--out", required=True)
     ap.add_argument("--nb-groups", type=int, default=500)
     ap.add_argument("--pope", type=int, default=1000)
-    ap.add_argument("--systems", default="qwen,mapika")
+    ap.add_argument("--systems", default="qwen,strands,mapika")
     ap.add_argument("--base", default="Qwen/Qwen3.5-2B-Base")
     ap.add_argument("--dtype", default="bfloat16")
     ap.add_argument("--long-side", type=int, default=448)
@@ -287,7 +359,9 @@ def main() -> None:
     for name in a.systems.split(","):
         try:
             t0 = time.time()
-            system = QwenUntrained(a.base, a.dtype, a.long_side) if name == "qwen" else Mapika(a.dtype)
+            system = {"qwen": lambda: QwenUntrained(a.base, a.dtype, a.long_side),
+                      "strands": lambda: StrandsV19(a.dtype, a.long_side),
+                      "mapika": lambda: Mapika(a.dtype)}[name]()
             all_res.update(run_system(system, items, a.out, a.batch))
             meta[f"{name}_minutes"] = round((time.time() - t0) / 60, 1)
             del system
