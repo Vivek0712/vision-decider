@@ -10,6 +10,7 @@ from __future__ import annotations
 import argparse
 import base64
 import io
+import threading
 from typing import Any
 
 import uvicorn
@@ -33,6 +34,9 @@ class VisionRequest(BaseModel):
 def build_app(ckpt: str, device: str, image_long_side: int) -> FastAPI:
     engine = load_engine(ckpt, device=device, image_long_side=image_long_side)
     app = FastAPI(title="vision-decider")
+    # FastAPI runs sync handlers on a thread pool; one model on one device serves one
+    # request at a time.
+    lock = threading.Lock()
 
     @app.get("/health")
     def health() -> dict[str, Any]:
@@ -42,7 +46,8 @@ def build_app(ckpt: str, device: str, image_long_side: int) -> FastAPI:
     @app.post("/v1/systemone", response_model=SystemOneResponse)
     def systemone(req: VisionRequest) -> SystemOneResponse:
         pil = tuple(Image.open(io.BytesIO(base64.b64decode(b))) for b in req.images)
-        return engine.ask_vision(VisionState(images=pil, text=req.state), req.questions)
+        with lock:
+            return engine.ask_vision(VisionState(images=pil, text=req.state), req.questions)
 
     return app
 

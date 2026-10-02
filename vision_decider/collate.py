@@ -1,11 +1,13 @@
 """Batch assembly for image rows: processor for pixels, tokenizer offsets for options.
 
-Differences from `strands_decider.data.collate.Collator`:
+Differences from `strands_decider.data.collate.SystemOneCollator`:
   * the prompt carries one `<|image_pad|>` per image, expanded here to N tokens;
   * `pixel_values` and `image_grid_thw` are returned beside the text tensors;
-  * rows whose image expansion plus question exceeds the window are dropped, not cut.
+  * rows whose image or whole prompt exceeds the budget are dropped, not cut, and the
+    batch shrinks; a batch with nothing left comes back as None.
 Everything else -- option shuffling every example, label remapping, ordinal smoothing,
 score reversal, teacher distributions in slot order -- is delegated to the parent.
+Pointer head only: targets are cut to the batch's widest option count.
 """
 
 from __future__ import annotations
@@ -33,6 +35,8 @@ from .prompting import (
 class VisionCollatorConfig(CollatorConfig):
     image_long_side: int = 448
     max_image_tokens: int = 640
+    # Task-name prefixes whose rows get no frozen-KL term (`kl_mask` False).
+    kl_exclude_tasks: tuple[str, ...] = ()
 
 
 def _load_image(src: Any, long_side: int) -> Image.Image:
@@ -47,10 +51,13 @@ def _load_image(src: Any, long_side: int) -> Image.Image:
 
 class VisionCollator(SystemOneCollator):
     def __init__(self, processor: Any, config: VisionCollatorConfig, *, train: bool = True):
+        if config.head_type != "pointer":
+            raise ValueError("VisionCollator supports the pointer head only")
         super().__init__(processor.tokenizer, config, train=train)
         self.processor = processor
         self.image_processor = processor.image_processor
         self.vcfg = config
+        self.dropped = 0  # rows dropped over the image or window budget, for logging
 
     def _prepare_images(self, exs: list[VisionExample]) -> tuple[dict[str, torch.Tensor], list[list[int]]]:
         flat = [_load_image(p, self.vcfg.image_long_side) for ex in exs for p in ex.images]
@@ -65,76 +72,64 @@ class VisionCollator(SystemOneCollator):
             k += len(ex.images)
         return {"pixel_values": img["pixel_values"], "image_grid_thw": img["image_grid_thw"]}, per_row
 
-    def __call__(self, batch: list[VisionExample]) -> dict[str, torch.Tensor]:  # type: ignore[override]
+    def __call__(self, batch: list[VisionExample]) -> dict[str, torch.Tensor] | None:  # type: ignore[override]
         mm, per_row = self._prepare_images(batch)
-        texts: list[str] = []
-        spans: list[tuple[int, Any]] = []
-        labels: list[int] = []
-        n_slots: list[int] = []
-        dists: list[torch.Tensor | None] = []
-        weights: list[float] = []
-        teachers: list[list[float] | None] = []
-        keep: list[int] = []
-
+        rows: list[dict[str, Any]] = []
         for i, ex in enumerate(batch):
             if any(n > self.vcfg.max_image_tokens for n in per_row[i]):
+                self.dropped += 1
                 continue  # drop, never truncate
             order = self._option_order(ex)
             state = VisionState(images=tuple(ex.images), text=ex.state)
             prompt, rq = build_vision_prompt(state, ex.to_question(self._instruction(ex)), option_order=order)
             expanded = expand_image_tokens(prompt, per_row[i])
-            texts.append(expanded)
-            spans.append((question_base(expanded, rq), rq.option_spans))
-            labels.append(self._remap_label(ex.label, order))
-            n_slots.append(ex.n_options)
-            dists.append(self._target_distribution(ex, ex.label, ex.n_options, order))
-            weights.append(ex.weight)
+            enc = self.tok(expanded, truncation=False, return_offsets_mapping=True)
+            if len(enc["input_ids"]) > self.cfg.max_length:
+                self.dropped += 1
+                continue
             t = getattr(ex, "teacher", None)
-            teachers.append(None if t is None else (t if order is None else [t[k] for k in order]))
-            keep.append(i)
+            rows.append({
+                "i": i,
+                "ex": ex,
+                "ids": enc["input_ids"],
+                "opt": option_token_index(enc["offset_mapping"], rq.option_spans, question_base(expanded, rq)),
+                "label": self._remap_label(ex.label, order),
+                "dist": self._target_distribution(ex, ex.label, ex.n_options, order),
+                "teacher": None if t is None else (t if order is None else [t[k] for k in order]),
+            })
+        if not rows:
+            return None
 
-        if not texts:
-            raise ValueError("every row in the batch exceeded max_image_tokens")
-
-        enc = self.tok(
-            texts, padding=True, truncation=False, return_tensors="pt",
-            padding_side="right", return_offsets_mapping=True,
-        )
-        if enc["input_ids"].size(1) > self.cfg.max_length:
-            raise ValueError(
-                f"batch is {enc['input_ids'].size(1)} tokens, over the {self.cfg.max_length} "
-                "window; lower image_long_side or drop the row upstream"
-            )
-        offs = enc["offset_mapping"].tolist()
-        per = [option_token_index(offs[i], sp, base) for i, (base, sp) in enumerate(spans)]
-        width = max(len(p) for p in per)
-
+        pad_id = self.tok.pad_token_id if self.tok.pad_token_id is not None else 0
+        length = max(len(r["ids"]) for r in rows)
+        width = max(len(r["opt"]) for r in rows)
+        labels = [r["label"] for r in rows]
         out: dict[str, torch.Tensor] = {
-            "input_ids": enc["input_ids"],
-            "attention_mask": enc["attention_mask"],
-            "n_slots": torch.tensor(n_slots, dtype=torch.long),
+            # Right padding: pool_last_token finds the final real token by mask length.
+            "input_ids": torch.tensor([r["ids"] + [pad_id] * (length - len(r["ids"])) for r in rows]),
+            "attention_mask": torch.tensor([[1] * len(r["ids"]) + [0] * (length - len(r["ids"])) for r in rows]),
+            "n_slots": torch.tensor([r["ex"].n_options for r in rows], dtype=torch.long),
             "labels": torch.tensor(labels, dtype=torch.long),
-            "weights": torch.tensor(weights, dtype=torch.float32),
-            "opt_idx": torch.tensor([p + [-1] * (width - len(p)) for p in per], dtype=torch.long),
+            "weights": torch.tensor([r["ex"].weight for r in rows], dtype=torch.float32),
+            "opt_idx": torch.tensor([r["opt"] + [-1] * (width - len(r["opt"])) for r in rows], dtype=torch.long),
+            "row_index": torch.tensor([r["i"] for r in rows], dtype=torch.long),  # kept rows' batch positions
+            "kl_mask": torch.tensor([not r["ex"].task.startswith(tuple(self.vcfg.kl_exclude_tasks))
+                                     for r in rows], dtype=torch.float32),
         }
-        if any(d is not None for d in dists):
+        if any(r["dist"] is not None for r in rows):
             out["label_dist"] = torch.stack([
-                d if d is not None
-                else torch.nn.functional.one_hot(torch.tensor(lab), num_classes=self.cfg.num_slots).float()
-                for d, lab in zip(dists, labels, strict=True)
-            ])
-        if any(t is not None for t in teachers):
-            tw = torch.zeros(len(teachers), self.cfg.num_slots)
-            tm = torch.zeros(len(teachers), dtype=torch.bool)
-            for r, t in enumerate(teachers):
-                if t is not None:
-                    tw[r, : len(t)] = torch.tensor(t)
-                    tm[r] = True
-            out["teacher"], out["teacher_mask"] = tw, tm
-        if mm:
-            # Images of dropped rows must not reach the model: re-run the processor on
-            # the kept rows only when anything was dropped.
-            if len(keep) != len(batch):
-                mm, _ = self._prepare_images([batch[i] for i in keep])
-            out.update(mm)
+                r["dist"] if r["dist"] is not None
+                else torch.nn.functional.one_hot(torch.tensor(r["label"]), num_classes=self.cfg.num_slots).float()
+                for r in rows
+            ])[:, :width]
+        if any(r["teacher"] is not None for r in rows):
+            tt = torch.zeros((len(rows), width), dtype=torch.float32)
+            for i, r in enumerate(rows):
+                if r["teacher"] is not None:
+                    tt[i, : len(r["teacher"])] = torch.tensor(r["teacher"], dtype=torch.float32)
+            out["teacher"] = tt
+            out["has_teacher"] = torch.tensor([r["teacher"] is not None for r in rows])
+        if len(rows) != len(batch):  # images of dropped rows must not reach the model
+            mm, _ = self._prepare_images([r["ex"] for r in rows])
+        out.update(mm)
         return out
