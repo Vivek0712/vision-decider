@@ -1,4 +1,4 @@
-# Pre-registration: v19-vision, images in the state
+# Pre-registration: v19-vision, Strands Decider (v19) with images in the state
 
 Committed before training. Same discipline as v9-v20.
 
@@ -9,16 +9,17 @@ Committed before training. Same discipline as v9-v20.
 
 ## Why
 
-Qwen3.5-2B-Base, the torso of every model since v13, is natively multimodal; the
-loader drops its vision tower. Kept, with v19's adapter and head loaded unchanged
-(no image training), v19 already decides over images about as well as the strongest
-open image decider, Mapika/decider-2b-vision, which was trained on 50k image rows and
-PPO. Its calibration is far better:
+Qwen3.5-2B-Base, the torso of every Strands Decider model since v13, is natively
+multimodal; the loader drops its vision tower. Kept, with the adapter and head of
+Strands Decider (v19) (`StrandsAgents/strands-decider-2B-hobson-v19`) loaded
+unchanged (no image training), Strands Decider (v19) already decides over images
+about as well as the strongest open image decider, Mapika/decider-2b-vision, which was
+trained on 50k image rows and PPO. Its calibration is far better:
 
 | model (images at 448 px; Mapika at its 768 px) | NaturalBench acc | NaturalBench G-Acc | NaturalBench ECE | POPE-adv acc | POPE-adv Brier | Image JevBench preview, exact (60) |
 | --- | --- | --- | --- | --- | --- | --- |
 | frozen Qwen3.5-2B-Base, option-number readout | 0.712 | 0.167 | 0.046 | 0.865 | 0.228 | 0.483 |
-| **v19 + vision tower, no image training** | 0.782 | 0.323 | **0.011** | **0.872** | **0.203** | 0.633 |
+| **Strands Decider (v19) + vision tower, no image training** | 0.782 | 0.323 | **0.011** | **0.872** | **0.203** | 0.633 |
 | Mapika/decider-2b-vision | **0.793** | **0.360** | 0.081 | 0.857 | 0.204 | 0.633 |
 
 (NaturalBench: first 300 groups, 1,200 questions; POPE adversarial: first 600 by
@@ -30,7 +31,8 @@ results 95% of the time. Single run, CPU, bf16. Per-item outputs:
 Two failures remain, and neither is noise:
 
 1. **Paired reasoning.** NaturalBench groups two images and two questions with
-   opposite answers; G-Acc counts a group only if all four are right. v19 gets 0.323,
+   opposite answers; G-Acc counts a group only if all four are right. Strands Decider
+   (v19) gets 0.323,
    below Mapika (0.360). Per question it is close (0.782 against 0.793), so the loss is
    in telling near-identical images apart, not in reading the question.
 2. **Confidence without the image.** With the image removed every model falls to chance
@@ -38,20 +40,22 @@ Two failures remain, and neither is noise:
 
    | image removed | NaturalBench mean confidence / ECE | POPE-adv mean confidence / ECE |
    | --- | --- | --- |
-   | v19 + vision tower | 0.652 / 0.152 | 0.725 / 0.225 |
+   | Strands Decider (v19) + vision tower | 0.652 / 0.152 | 0.725 / 0.225 |
    | Mapika/decider-2b-vision | 0.654 / 0.154 | 0.686 / 0.181 |
    | frozen Qwen3.5-2B-Base | 0.592 / 0.092 | 0.526 / 0.056 |
 
    A decision model whose confidence does not fall when its evidence is missing is
    exactly the failure the confidence-routing convention (act at 0.9, confirm at 0.5)
    cannot survive. The frozen torso is less overconfident than either trained model,
-   so v19's training made this worse, and nothing in the corpus teaches it.
+   so Strands Decider (v19)'s text training made this worse, and nothing in its corpus
+   teaches it.
 
 ## What is being changed
 
-Training starts from v19 (adapter and head, `init_from`), with the Qwen3.5 vision tower
-and patch merger loaded and **frozen**; only v19's LoRA (same 12 targets, rank 16) and
-the pointer head train, as in v19. Same objective as v19: cross-entropy (ordinal
+Training starts from Strands Decider (v19) (adapter and head, `init_from`), with the
+Qwen3.5 vision tower and patch merger loaded and **frozen**; only v19's LoRA (same 12
+targets, rank 16) and the pointer head train, as in v19. Same objective as v19:
+cross-entropy (ordinal
 smoothing 0.1 on score rows), KL to the frozen torso's option-number readout
 (weight 0.3), option order reshuffled every example. Images enter `<state>` as Qwen
 placeholders at a fixed 448 px long side (196 tokens for a square image). One setting,
@@ -90,7 +94,7 @@ All on the full evaluation sets, measured before this file is committed, same co
 and settings as the outcome. **[fill: rerun the three rows of the table under Why on
 the full sets]**
 
-| evaluation | v19 + vision tower | Mapika/decider-2b-vision | frozen 2B |
+| evaluation | Strands Decider (v19) + vision tower | Mapika/decider-2b-vision | frozen 2B |
 | --- | --- | --- | --- |
 | NaturalBench (1,900 groups, 7,600 Q): acc / G-Acc / ECE | [fill] | [fill] | [fill] |
 | NaturalBench, image removed: mean confidence / ECE | [fill] | [fill] | [fill] |
@@ -138,10 +142,10 @@ tasks with an unrelated image attached.
 
 ## Which model is the default afterwards
 
-v19 stays the reference recipe for text. If predictions 1 to 4 all hold, v19-vision is
-published as the image-capable model and becomes the default when a request carries
-images. Otherwise v19 with its vision tower kept (no image training) is the image
-default, as measured under Why.
+Strands Decider (v19) stays the reference recipe for text. If predictions 1 to 4 all
+hold, v19-vision is published as the image-capable Strands Decider model and becomes the
+default when a request carries images. Otherwise Strands Decider (v19) with its vision
+tower kept (no image training) is the image default, as measured under Why.
 
 ## What this test cannot show
 
