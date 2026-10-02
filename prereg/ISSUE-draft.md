@@ -21,7 +21,7 @@ Strands Decider (v19) runs on Qwen3.5-2B-Base, which is natively multimodal, but
 - Images are encoded once and shared across questions; M-RoPE positions passed explicitly (exact against a full forward to < 1e-5)
 - Text-only requests unchanged (v19 parity 9.8e-4); a text-only server refuses images with 422
 
-Measured as published, no image training: NaturalBench 78.2% (ECE 0.011), POPE-adversarial 87.2%, level with the image-trained Mapika/decider-2b-vision on accuracy and better calibrated.
+Measured as published, no image training: NaturalBench 78.2% (ECE 0.011), POPE-adversarial 87.2%, level with the image-trained Mapika/decider-2b-vision on accuracy and better calibrated on NaturalBench. Full benchmarks below.
 
 Working implementation, tests and evaluation: [Vivek0712/strands-decider@feat/vision](https://github.com/strands-labs/strands-decider/compare/main...Vivek0712:strands-decider:feat/vision).
 
@@ -43,197 +43,130 @@ Keeping the vision tower reuses everything the decider already validated.
 
 ### Additional Context
 
+**Headline.** Three systems, each scored with the image and with it removed. Bold is the best of the three.
+
+| | NaturalBench acc | NaturalBench G-Acc | NaturalBench ECE | POPE-adv acc | POPE-adv Brier | POPE-adv ECE | Image JevBench preview, exact (60) |
+|---|---|---|---|---|---|---|---|
+| Qwen3.5-2B-Base, untrained readout | 0.712 | 0.167 | 0.046 | 0.865 | 0.228 | 0.111 | 0.483 |
+| **Strands Decider (v19), `--vision`** | 0.782 | 0.323 | **0.011** | **0.872** | **0.203** | 0.070 | **0.633** |
+| Mapika/decider-2b-vision (image-trained) | **0.793** | **0.360** | 0.081 | 0.857 | 0.204 | **0.065** | **0.633** |
+
 <details>
-<summary>Results: Strands Decider (v19) over images, no image training</summary>
+<summary>NaturalBench (300 groups, 1,200 questions)</summary>
 
-| System | NaturalBench acc | NB G-Acc | NB ECE | POPE-adv acc | POPE-adv Brier | Image JevBench preview, exact (60) |
+Each group is two images and two questions whose answers flip between the images, built so a model that ignores the image scores at chance. Q-Acc counts a question right on both images, I-Acc an image right on both questions, G-Acc a group with all four right.
+
+| System | Image | Acc | Q-Acc | I-Acc | G-Acc | Brier | ECE | Mean confidence |
+|---|---|---|---|---|---|---|---|---|
+| Qwen3.5-2B-Base, untrained | with | 0.712 | 0.435 | 0.487 | 0.167 | 0.380 | 0.046 | 0.665 |
+| | removed | 0.500 | 0.000 | 0.110 | 0.000 | 0.529 | 0.092 | 0.592 |
+| **Strands Decider (v19)** | with | 0.782 | 0.573 | 0.605 | 0.323 | 0.307 | **0.011** | 0.777 |
+| | removed | 0.500 | 0.000 | 0.103 | 0.000 | 0.561 | 0.152 | 0.652 |
+| Mapika/decider-2b-vision | with | **0.793** | **0.595** | **0.630** | **0.360** | **0.303** | 0.081 | 0.867 |
+| | removed | 0.500 | 0.000 | 0.223 | 0.000 | 0.568 | 0.154 | 0.654 |
+
+By question type (with the image):
+
+| System | Yes/no (908): acc / Brier / ECE | Two-way choice (292): acc / Brier / ECE |
+|---|---|---|
+| Qwen3.5-2B-Base, untrained | 0.702 / 0.395 / 0.056 | 0.743 / 0.336 / 0.028 |
+| **Strands Decider (v19)** | 0.769 / 0.324 / **0.024** | 0.822 / 0.253 / **0.031** |
+| Mapika/decider-2b-vision | **0.775** / **0.321** / 0.081 | **0.849** / **0.249** / 0.089 |
+
+v19 is within 1.1 points of Mapika on accuracy and 0.004 on Brier, with about 7x lower ECE; Mapika is ahead on paired reasoning (G-Acc 0.360 against 0.323) and answers with higher confidence (0.867 against 0.777).
+</details>
+
+<details>
+<summary>POPE adversarial (600 questions)</summary>
+
+"Is there a {object} in the image?" over COCO val2014, with adversarial negatives (objects that often co-occur), balanced yes/no.
+
+| System | Image | Acc | Brier | ECE | Mean confidence |
+|---|---|---|---|---|---|
+| Qwen3.5-2B-Base, untrained | with | 0.865 | 0.228 | 0.111 | 0.757 |
+| | removed | 0.470 | 0.509 | 0.056 | 0.526 |
+| **Strands Decider (v19)** | with | **0.872** | **0.203** | 0.070 | 0.804 |
+| | removed | 0.500 | 0.599 | 0.225 | 0.725 |
+| Mapika/decider-2b-vision | with | 0.857 | 0.204 | **0.065** | 0.922 |
+| | removed | 0.505 | 0.579 | 0.181 | 0.686 |
+
+v19 is the most accurate and has the lowest Brier; Mapika is slightly better on ECE. Without the image, both trained models stay confident at chance (v19 0.725, Mapika 0.686); the untrained torso does not (0.526).
+</details>
+
+<details>
+<summary>Image JevBench (official reference, and the published preview items)</summary>
+
+**Official leaderboard** ([Image JevBench v0.1.5](https://benchmarkheaven.com/image-jev-bench)): the items are sealed and the runner is private, so v19 is not on it. For reference, Mapika/decider-2b-vision's row: public 151/228, sealed 319/456, Intelligence 52.8, Calibration 81.5, ranked 10th. We would like to submit v19 with `--vision` if you agree.
+
+**Preview items.** The site publishes 128 earlier preview items (question, options, gold, source row) and Mapika's official right/wrong on each. We rebuilt them from their source datasets. 60 are exact (CLEVR-HOPE, Geometry3K, ArxivQA: the source image unchanged); 68 need rendering whose code is not public (FinQA tables, ScreenSpot click markers, Mind2Web boxes), so they are approximate.
+
+Harness check: on the 60 exact items, our Mapika run agrees with Mapika's official per-item results on 95% of items (38 right against 37 officially). On the approximate items it does not (ScreenSpot 0.64 against 0.08 officially; Mind2Web 0.08 against 0.58), so only the exact subset is used for comparison.
+
+| System | Image | Exact (60) acc | Exact Brier | Exact ECE | All 128 acc |
+|---|---|---|---|---|---|
+| Qwen3.5-2B-Base, untrained | with | 0.483 | 0.640 | 0.138 | 0.367 |
+| | removed | 0.317 | 0.754 | 0.180 | 0.281 |
+| **Strands Decider (v19)** | with | **0.633** | 0.484 | **0.135** | 0.430 |
+| | removed | 0.350 | 0.683 | 0.157 | 0.266 |
+| Mapika/decider-2b-vision | with | **0.633** | **0.454** | 0.191 | 0.531 |
+| | removed | 0.500 | 0.593 | 0.150 | 0.336 |
+
+By source dataset (with the image; chance is 0.50 for CLEVR-HOPE, 0.25 for Geometry3K, ArxivQA and FinQA, 0.20 for ScreenSpot and Mind2Web):
+
+| System | CLEVR-HOPE (20, exact) | Geometry3K (20, exact) | ArxivQA (20, exact) | FinQA (20, approx) | ScreenSpot (36, approx) | Mind2Web (12, approx) |
 |---|---|---|---|---|---|---|
-| Qwen3.5-2B-Base, untrained option-number readout | 0.712 | 0.167 | 0.046 | 0.865 | 0.228 | 0.483 |
-| **Strands Decider (v19), `--vision`** | 0.782 | 0.323 | **0.011** | **0.872** | **0.203** | **0.633** |
-| Mapika/decider-2b-vision (image-trained), 768 px | **0.793** | **0.360** | 0.081 | 0.857 | 0.204 | **0.633** |
+| Qwen3.5-2B-Base, untrained | 0.85 | 0.15 | 0.45 | 0.30 | 0.25 | 0.25 |
+| **Strands Decider (v19)** | 0.85 | 0.45 | **0.60** | 0.15 | 0.31 | 0.25 |
+| Mapika/decider-2b-vision | **0.90** | 0.45 | 0.55 | 0.30 | 0.64 | 0.08 |
+| Mapika, official | 0.90 | 0.40 | 0.55 | 0.40 | 0.08 | 0.58 |
 
-With the image removed, every system falls to chance (NaturalBench 0.500, POPE ~0.50), so the answers come from the image.
+Mapika scores 0.55 on ArxivQA with or without the image, so some of those questions are answerable from the text alone. 60 items resolve differences of about 10 points at best.
+</details>
 
-- NaturalBench: first 300 groups (1,200 questions); G-Acc counts a group only when all four answers are right.
-- POPE: first 600 adversarial items by question id.
-- Image JevBench: the official set is sealed. These are the 60 published preview items rebuilt exactly from source rows; our Mapika run agrees with its official per-item results on 95% of them.
-- One run per system, CPU, bf16, 448 px (Mapika at its 768 px).
-- Per-item outputs and scripts: `evaluation/vision/` on the branch.
+<details>
+<summary>Image dependence: how much the image moves the answer</summary>
+
+The same items scored with and without the image. Total-variation distance between the two probability vectors; confidence drop = top probability with the image minus without; answer flips = share of items whose top answer changes.
+
+| System | NaturalBench: TV / conf drop / flips | POPE-adv: TV / conf drop / flips | Image JevBench exact: TV / conf drop / flips |
+|---|---|---|---|
+| Qwen3.5-2B-Base, untrained | 0.179 / 0.073 / 0.512 | 0.258 / 0.231 / 0.478 | 0.220 / 0.126 / 0.383 |
+| **Strands Decider (v19)** | 0.275 / 0.124 / 0.437 | 0.279 / 0.080 / 0.412 | 0.236 / 0.094 / 0.433 |
+| Mapika/decider-2b-vision | 0.368 / 0.213 / 0.477 | 0.399 / 0.236 / 0.418 | 0.355 / 0.237 / 0.500 |
+
+All three depend on the image (every system falls to chance without it). The trained models lose too little confidence when it is missing, v19 most of all on POPE (0.080).
+</details>
+
+<details>
+<summary>Text: nothing changes</summary>
+
+With `--vision`, a text-only request runs through the same decoder weights. On text prompts v19 on the multimodal torso matches upstream's own v19 load to a max |Δp| of 9.8e-4 (bf16- against fp32-loaded weights), and the test suite pins text answers equal between the text and vision engines. JevBench (231 text tasks) was not rerun with `--vision`; v19's published result stands: 167/231 (0.723), Brier 0.342, ECE 0.052.
+</details>
+
+<details>
+<summary>Method</summary>
+
+- **Models:** `StrandsAgents/strands-decider-2B-hobson-v19` with `--vision` (adapter and head unchanged, vision tower frozen, per-kind temperatures as served); `Qwen/Qwen3.5-2B-Base` untrained, scored by the frozen torso's option-number logits at `<answer>` (the readout v19's KL term uses); `Mapika/decider-2b-vision` through its own published code and prompt.
+- **Images:** v19 and Qwen at 448 px on the longer side (196 tokens for a square image); Mapika at 768 px, its training size.
+- **Questions:** v19 gets yes/no as `noul` with default criteria and two-way questions as `choice`; the untrained readout gets `noul` criteria "the answer is yes/no"; Mapika gets its own `(A)/(B)` prompt.
+- **Data:** NaturalBench (`BaiqiL/NaturalBench`), first 300 groups of shard 0; POPE (`lmms-lab/POPE`), adversarial split, first 600 by question id; Image JevBench preview definitions from `fstandhartinger/model-market-comparison` (MIT), images from each item's source dataset.
+- **Runs:** one run per system, CPU (Intel Sapphire Rapids, 4-8 vCPU), bf16, transformers 5.18.0, torch 2.14.1. Confidence = top probability; Brier summed over options; ECE with 10 bins.
+- **Reproduce:** `evaluation/vision/run.py` on the branch; `evaluation/vision/results/` holds every per-item probability behind these tables. A 16-item spot check of the in-tree script against the recorded run: same answer on all 16, mean |Δp| 0.004 (fp32 against bf16).
 </details>
 
 <details>
 <summary>Proposed follow-up: an image fine-tune from v19 (preregistration draft)</summary>
 
-Two gaps remain that text training does not teach:
-- **Paired reasoning:** NaturalBench G-Acc 0.323 against Mapika's 0.360.
-- **Confidence without the image:** POPE mean confidence 0.725 at chance, ECE 0.225.
+Text training does not teach the two gaps above: paired reasoning (G-Acc) and losing confidence when the image is missing. The draft preregistration, in the form of `research/preregistrations/`, is at [PREREGISTRATION-v19-vision.md](https://github.com/Vivek0712/vision-decider/blob/phase1-baselines/prereg/PREREGISTRATION-v19-vision.md). It trains from v19 with the vision tower frozen, on licence-clean image rows (VQAv2 complementary pairs, GQA, PlotQA, rendered TabFact, EuroSAT, Open Images, KonIQ), image-removed KL-only copies, and a text replay. Its predictions, on the items above:
 
-The draft below proposes an image fine-tune from v19 to close them, in the form of `research/preregistrations/`. It is for discussion: thresholds, mix and naming are open. If the image checkpoint lands, what should it be called (e.g. `strands-decider-2B-hobson-v19-vision`)?
+| # | Prediction | v19 today |
+|---|---|---|
+| 1 | NaturalBench G-Acc ≥ 0.383 and above Mapika; accuracy ≥ 0.802 | 0.323; 0.782 |
+| 2 | Image removed: mean confidence ≤ 0.58 and ECE ≤ 0.10 on NaturalBench and POPE; with the image, ECE ≤ 0.04 (NaturalBench) and ≤ 0.07 (POPE) | 0.652 / 0.152; 0.725 / 0.225 |
+| 3 | POPE ≥ 0.862; Image JevBench preview exact ≥ 35/60 | 0.872; 38/60 |
+| 4 | JevBench ≥ 163, ECE ≤ 0.07, Brier ≤ 0.36 | 167, 0.052, 0.342 |
 
-# Pre-registration: vand san-vision, Strands Decider (v19) with images in the state
-
-Committed before training. Same discipline as v9-v20.
-> **Draft for the issue.** Fields marked **[fill before commit]** are the training-row
-> counts, fixed once the data is built; then this file is committed and frozen before
-> the first training step. The evaluation sets and baselines below are final: they are
-> the ones already measured. Nothing else changes after the issue agrees it.
-
-## Why
-
-Qwen3.5-2B-Base, the torso of every Strands Decider model since v13, is natively
-multimodal; the loader drops its vision tower. Kept, with the adapter and head of
-Strands Decider (v19) (`StrandsAgents/strands-decider-2B-hobson-v19`) loaded
-unchanged (no image training), Strands Decider (v19) already decides over images
-about as well as the strongest open image decider, Mapika/decider-2b-vision, which was
-trained on 50k image rows and PPO. Its calibration is far better:
-
-| model (images at 448 px; Mapika at its 768 px) | NaturalBench acc | NaturalBench G-Acc | NaturalBench ECE | POPE-adv acc | POPE-adv Brier | Image JevBench preview, exact (60) |
-| --- | --- | --- | --- | --- | --- | --- |
-| frozen Qwen3.5-2B-Base, option-number readout | 0.712 | 0.167 | 0.046 | 0.865 | 0.228 | 0.483 |
-| **Strands Decider (v19) + vision tower, no image training** | 0.782 | 0.323 | **0.011** | **0.872** | **0.203** | 0.633 |
-| Mapika/decider-2b-vision | **0.793** | **0.360** | 0.081 | 0.857 | 0.204 | 0.633 |
-
-(NaturalBench: first 300 groups, 1,200 questions; POPE adversarial: first 600 by
-question id; Image JevBench preview: the 60 published preview items rebuilt exactly
-from their source rows, on which our Mapika run agrees with Mapika's official per-item
-results 95% of the time. Single run, CPU, bf16. Per-item outputs:
-`evaluation/vision/results/`.)
-
-Two failures remain, and neither is noise:
-
-1. **Paired reasoning.** NaturalBench groups two images and two questions with
-   opposite answers; G-Acc counts a group only if all four are right. Strands Decider
-   (v19) gets 0.323,
-   below Mapika (0.360). Per question it is close (0.782 against 0.793), so the loss is
-   in telling near-identical images apart, not in reading the question.
-2. **Confidence without the image.** With the image removed every model falls to chance
-   (NaturalBench 0.500, POPE ~0.50), as it should, but keeps answering confidently:
-
-   | image removed | NaturalBench mean confidence / ECE | POPE-adv mean confidence / ECE |
-   | --- | --- | --- |
-   | Strands Decider (v19) + vision tower | 0.652 / 0.152 | 0.725 / 0.225 |
-   | Mapika/decider-2b-vision | 0.654 / 0.154 | 0.686 / 0.181 |
-   | frozen Qwen3.5-2B-Base | 0.592 / 0.092 | 0.526 / 0.056 |
-
-   A decision model whose confidence does not fall when its evidence is missing is
-   exactly the failure the confidence-routing convention (act at 0.9, confirm at 0.5)
-   cannot survive. The frozen torso is less overconfident than either trained model,
-   so Strands Decider (v19)'s text training made this worse, and nothing in its corpus
-   teaches it.
-
-## What is being changed
-
-Training starts from Strands Decider (v19) (adapter and head, `init_from`), with the
-Qwen3.5 vision tower and patch merger loaded and **frozen**; only v19's LoRA (same 12
-targets, rank 16) and the pointer head train, as in v19. Same objective as v19:
-cross-entropy (ordinal
-smoothing 0.1 on score rows), KL to the frozen torso's option-number readout
-(weight 0.3), option order reshuffled every example. Images enter `<state>` as Qwen
-placeholders at a fixed 448 px long side (196 tokens for a square image). One setting,
-fixed here; config `configs/experiments/v19-vision.yaml`. If v19-vision fails, the
-mix, the weights and the image size are not tuned against the results below and rerun.
-
-Three kinds of rows:
-
-| kind | source | rows | labels | why |
-| --- | --- | --- | --- | --- |
-| image, paired yes/no | VQAv2 train2014 complementary pairs (CC BY 4.0 annotations, COCO train images): same question, a human-chosen similar image, opposite answer; both halves kept together | **[fill: target 20,000 = 10,000 pairs]** | dataset answer, majority of 10 | failure 1: the only public source of same-question, different-image pairs at this scale |
-| image, yes/no and choice | GQA balanced train, binary (verify/logical/compare) and choose questions (CC BY 4.0) | **[fill: target 10,000]** | dataset | compositional questions, templated so pairs form across images |
-| image, documents and charts | PlotQA (CC BY 4.0) templated yes/no and choice; TabFact statements over tables rendered as images (MIT, CC BY-SA tables), entailed/refuted | **[fill: target 6,000 + 6,000]** | dataset | text-in-image reading, held out of every evaluation below |
-| image, choice with runtime labels | EuroSAT (MIT) and Open Images (CC BY 4.0) classification, one fixed option set per task | **[fill: target 8,000]** | dataset | reading option text over images |
-| image, score | KonIQ-10k (CC BY 4.0; CC-licensed images only), 5-level quality | **[fill: target 5,000]** | majority level; vote histogram as soft target | the score type on images |
-| image removed, KL only | a copy of 25% of the image rows above with at most 9 options, image deleted, weight 0 | **[fill: ~12,000]** | none: KL to the frozen torso's reading of the same text-only prompt (weight 1.0, upstream `kl_only_files`) | failure 2: teaches confidence to fall without the image instead of guessing from the question |
-| text replay | rows drawn from v19's training files, each source in its v19 proportion | **[fill: target 20,000]** | as in v19 | holds text behaviour (prediction 4) |
-
-Licences: every image source above permits training a model released with open
-weights. Excluded deliberately: ImageNet, FUNSD, Rico, Food-101, AVA, Winoground
-(non-commercial or research-only), ScreenSpot and ChartQA (evaluation sets), SEED and
-ScienceQA (CC BY-NC).
-
-Contamination: training images are deduplicated against every evaluation image by
-COCO id and by perceptual hash (dHash, Hamming distance <= 4). POPE uses COCO
-val2014, so no VQAv2 or GQA row whose image is a COCO val2014 image is kept (Visual
-Genome includes some). NaturalBench images are Flickr30k and DOCCI; neither is a
-training source. **[fill: rows removed by deduplication]**
-
-Splits: by image, pair and source, so the two halves of a pair, every question about
-one image and an image-removed copy are always on the same side. Validation 3%.
-
-## Baselines
-
-The evaluation sets are fixed as the ones measured under Why, and the trained model is
-scored on exactly these items with the same code and settings
-(`evaluation/vision/`): NaturalBench, the first 300 groups of shard 0 (1,200
-questions); POPE adversarial, the first 600 items by question id; Image JevBench
-preview, the 60 items rebuilt exactly from their source rows. Each is also scored with
-the image removed. The baselines are the rows of the two tables under Why, plus the
-text benchmark:
-
-| evaluation | Strands Decider (v19) |
-| --- | --- |
-| JevBench (231), text: score / ECE / Brier | 167 / 0.052 / 0.342 |
-
-## Predictions
-
-1. **Paired reasoning is learned:** NaturalBench G-Acc at least 0.383 (v19 0.323 +
-   0.060), and above Mapika's 0.360. Per-question NaturalBench accuracy at least 0.802
-   (v19 0.782 + 0.020).
-2. **Confidence falls without the image, and only then:** with the image removed, mean
-   confidence at most 0.58 on both NaturalBench and POPE, and ECE at most 0.10 on both
-   (v19 0.152 / 0.225; Mapika 0.154 / 0.181). With the image, NaturalBench ECE at most
-   0.04 and POPE ECE at most 0.07: the confidence is lost where the evidence is, not
-   everywhere.
-3. **Nothing on images is lost:** POPE adversarial accuracy at least 0.862 (v19 0.872 -
-   0.010); Image JevBench preview exact at least 35 of 60 (v19 38 - 3).
-4. **Nothing on text is lost:** JevBench at least 163, ECE at most 0.07, Brier at most
-   0.36 (v19 167 / 0.052 / 0.342; the retrain noise is SD 3.2 tasks).
-
-Exploratory, no numeric prediction: Image JevBench (official) if the maintainers agree
-to submit; the 68 approximate preview items (ScreenSpot, Mind2Web, FinQA); NaturalBench
-yes/no against two-way choice; score rows on held-out KonIQ (Spearman with the mean
-opinion score, and score confidence); the image-removed confidence on JevBench's text
-tasks with an unrelated image attached.
-
-## What would count as failure
-
-- **1 fails:** 10,000 human-made complementary pairs do not teach a single-pass 2B model
-  to separate near-identical images; the gap to Mapika would then come from its RL stage
-  or its 768 px images, not its data.
-- **2 fails on the image-removed rows but holds with the image:** KL-only rows toward the
-  frozen torso are too weak a target; the frozen torso is itself mildly overconfident
-  without the image (POPE confidence 0.526 at chance).
-- **2 holds by lowering confidence everywhere:** the with-image ECE bounds catch this; the
-  model learned to hedge, not to notice the missing image.
-- **1 and 2 hold, 4 fails:** image training costs text decisions at this mix; the text
-  replay share was too small.
-
-## Which model is the default afterwards
-
-Strands Decider (v19) stays the reference recipe for text. If predictions 1 to 4 all
-hold, v19-vision is published as the image-capable Strands Decider model and becomes the
-default when a request carries images. Otherwise Strands Decider (v19) with its vision
-tower kept (no image training) is the image default, as measured under Why.
-
-## What this test cannot show
-
-- **NaturalBench is natural photographs.** It says nothing about documents, charts or
-  screens, where most agent decisions sit; the Image JevBench preview's 60 exact items
-  (CLEVR scenes, geometry diagrams, paper figures) are the only other measure, and 60
-  items resolve differences of about 10 points at best. The official Image JevBench
-  is sealed; its public items are not downloadable.
-- **G-Acc on 300 groups resolves differences of about 0.03** (one standard error, about
-  0.027); prediction 1's margin is twice that. NaturalBench's other 1,600 groups are left
-  untouched as a reserve, not scored here.
-- **One seed.** The text retrain noise (SD 3.2 JevBench tasks) is known; the image
-  noise is not.
-- **Mapika runs at 768 px and v19-vision at 448 px.** A gap could be resolution rather
-  than training; the image size is fixed here, not tuned.
-- **CPU bf16 evaluation** for every row; GPU numerics differ by about 1e-3 per probability.
-
-## Outcome (added after the run)
-
-[Nothing above this section is edited after training.]
-
+Thresholds, mix and naming are open for discussion. If the image checkpoint lands, what should it be called (e.g. `strands-decider-2B-hobson-v19-vision`)?
 </details>
 
 **One PR or two?** Happy to open this as one PR now (image input only), or hold it until the fine-tune is done so both land together. Whichever you prefer.
