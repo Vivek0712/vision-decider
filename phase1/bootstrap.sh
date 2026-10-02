@@ -43,6 +43,8 @@ pip install -q -e /opt/vision-decider
 python -c "import torch, transformers; print('torch', torch.__version__, 'threads', torch.get_num_threads(), 'transformers', transformers.__version__)"
 lscpu | grep -E 'Model name|^CPU\(s\)|amx' | head -5 || true
 
+# Prebuilt Image JevBench preview items (built once locally so renders are identical).
+aws s3 sync s3://$BUCKET/data/ijb_preview /opt/ijb --only-show-errors || true
 cd /opt/vision-decider
 # Preflight: every system on a handful of items, so a load or format error stops the
 # run in minutes instead of after hours.

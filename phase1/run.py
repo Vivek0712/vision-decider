@@ -207,7 +207,8 @@ def run_system(system: Any, items: list[dict[str, Any]], out: str, batch: int, l
                 chunk = todo[s:s + batch]
                 for it, p in zip(chunk, system.probs(chunk, blind), strict=True):
                     r = {k: it[k] for k in ("id", "bench", "kind", "gold") if k in it}
-                    r.update({k: it[k] for k in ("group", "q", "i") if k in it}, probs=p)
+                    r.update({k: it[k] for k in ("group", "q", "i", "dataset", "exact", "official_mapika_ok")
+                              if k in it}, probs=p)
                     fh.write(json.dumps(r) + "\n")
                     done[it["id"]] = r
                 fh.flush()
@@ -230,6 +231,23 @@ def score(all_res: dict[str, list[dict[str, Any]]]) -> dict[str, Any]:
         nb = by_bench.get("naturalbench")
         if nb:
             out[tag]["naturalbench"]["paired"] = naturalbench_paired(nb)
+        ijb = by_bench.get("ijb_preview")
+        if ijb:
+            block = out[tag]["ijb_preview"]
+            block["exact_only"] = summarise([r for r in ijb if r.get("exact")])["all"]
+            per: dict[str, list[dict[str, Any]]] = {}
+            for r in ijb:
+                per.setdefault(r["dataset"], []).append(r)
+            block["by_dataset"] = {d: summarise(v)["all"] for d, v in sorted(per.items())}
+            if tag == "mapika":
+                # Our harness against the official per-item log: does it reproduce them?
+                pred_ok = [max(range(len(r["probs"])), key=r["probs"].__getitem__) == r["gold"] for r in ijb]
+                agree = [a == r["official_mapika_ok"] for a, r in zip(pred_ok, ijb)]
+                ex = [g for g, r in zip(agree, ijb) if r.get("exact")]
+                block["official_agreement"] = {
+                    "ours_correct": sum(pred_ok), "official_correct": sum(r["official_mapika_ok"] for r in ijb),
+                    "item_agreement": round(sum(agree) / len(agree), 4),
+                    "item_agreement_exact": round(sum(ex) / len(ex), 4) if ex else None}
     for tag in list(all_res):
         if not tag.endswith("-blind") and f"{tag}-blind" in all_res:
             out[tag]["image_dependence"] = image_dependence(all_res[tag], all_res[f"{tag}-blind"])
@@ -247,15 +265,21 @@ def main() -> None:
     ap.add_argument("--long-side", type=int, default=448)
     ap.add_argument("--batch", type=int, default=4)
     ap.add_argument("--nb-local"), ap.add_argument("--pope-local")
+    ap.add_argument("--ijb-jsonl", help="Image JevBench preview items built by phase1.ijb_preview")
     a = ap.parse_args()
     os.makedirs(a.out, exist_ok=True)
     torch.set_num_threads(os.cpu_count() or 1)
     print(f"[phase1] torch {torch.__version__} threads {torch.get_num_threads()}", flush=True)
 
-    items = list(naturalbench(a.nb_groups, a.nb_local)) + list(pope(a.pope, a.pope_local))
+    items = (list(naturalbench(a.nb_groups, a.nb_local)) if a.nb_groups else []) + \
+        (list(pope(a.pope, a.pope_local)) if a.pope else [])
+    if a.ijb_jsonl:
+        from phase1.ijb_preview import load as load_ijb
+        items += load_ijb(a.ijb_jsonl)
     print(f"[phase1] {len(items)} items "
           f"({sum(i['bench'] == 'naturalbench' for i in items)} NaturalBench, "
-          f"{sum(i['bench'] == 'pope_adversarial' for i in items)} POPE)", flush=True)
+          f"{sum(i['bench'] == 'pope_adversarial' for i in items)} POPE, "
+          f"{sum(i['bench'] == 'ijb_preview' for i in items)} Image JevBench preview)", flush=True)
     meta = {"args": vars(a), "items": len(items), "started": time.strftime("%Y-%m-%d %H:%M:%S")}
 
     all_res: dict[str, list[dict[str, Any]]] = {}
