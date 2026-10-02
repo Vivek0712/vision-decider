@@ -1,11 +1,11 @@
-# Pre-registration: v19-vision, Strands Decider (v19) with images in the state
+# Pre-registration: vand san-vision, Strands Decider (v19) with images in the state
 
 Committed before training. Same discipline as v9-v20.
 
-> **Draft for the issue.** Fields marked **[fill before commit]** are fixed once the
-> data is built and the baselines are rerun on the full evaluation sets, then this file
-> is committed and frozen before the first training step. Nothing else in it changes
-> after the issue agrees it.
+> **Draft for the issue.** Fields marked **[fill before commit]** are the training-row
+> counts, fixed once the data is built; then this file is committed and frozen before
+> the first training step. The evaluation sets and baselines below are final: they are
+> the ones already measured. Nothing else changes after the issue agrees it.
 
 ## Why
 
@@ -90,34 +90,30 @@ one image and an image-removed copy are always on the same side. Validation 3%.
 
 ## Baselines
 
-All on the full evaluation sets, measured before this file is committed, same code
-and settings as the outcome. **[fill: rerun the three rows of the table under Why on
-the full sets]**
+The evaluation sets are fixed as the ones measured under Why, and the trained model is
+scored on exactly these items with the same code and settings
+(`evaluation/vision/`): NaturalBench, the first 300 groups of shard 0 (1,200
+questions); POPE adversarial, the first 600 items by question id; Image JevBench
+preview, the 60 items rebuilt exactly from their source rows. Each is also scored with
+the image removed. The baselines are the rows of the two tables under Why, plus the
+text benchmark:
 
-| evaluation | Strands Decider (v19) + vision tower | Mapika/decider-2b-vision | frozen 2B |
-| --- | --- | --- | --- |
-| NaturalBench (1,900 groups, 7,600 Q): acc / G-Acc / ECE | [fill] | [fill] | [fill] |
-| NaturalBench, image removed: mean confidence / ECE | [fill] | [fill] | [fill] |
-| POPE adversarial (3,000): acc / Brier / ECE | [fill] | [fill] | [fill] |
-| POPE adversarial, image removed: mean confidence / ECE | [fill] | [fill] | [fill] |
-| Image JevBench preview, exact (60) | [fill] | [fill] | [fill] |
-| JevBench (231), text: score / ECE / Brier | 167 / 0.052 / 0.342 | — | — |
+| evaluation | Strands Decider (v19) |
+| --- | --- |
+| JevBench (231), text: score / ECE / Brier | 167 / 0.052 / 0.342 |
 
 ## Predictions
 
-Each threshold below is written against the 300-group / 600-item numbers under Why and
-is re-expressed against the full-set baseline in the same form (baseline plus the stated
-margin) before commit.
-
-1. **Paired reasoning is learned:** NaturalBench G-Acc at least v19 + 0.060 (subset:
-   0.383), and above Mapika's. Per-question NaturalBench accuracy at least v19 + 0.020.
+1. **Paired reasoning is learned:** NaturalBench G-Acc at least 0.383 (v19 0.323 +
+   0.060), and above Mapika's 0.360. Per-question NaturalBench accuracy at least 0.802
+   (v19 0.782 + 0.020).
 2. **Confidence falls without the image, and only then:** with the image removed, mean
    confidence at most 0.58 on both NaturalBench and POPE, and ECE at most 0.10 on both
    (v19 0.152 / 0.225; Mapika 0.154 / 0.181). With the image, NaturalBench ECE at most
    0.04 and POPE ECE at most 0.07: the confidence is lost where the evidence is, not
    everywhere.
-3. **Nothing on images is lost:** POPE adversarial accuracy at least v19 - 0.010
-   (subset: 0.862); Image JevBench preview exact at least v19 - 3 items.
+3. **Nothing on images is lost:** POPE adversarial accuracy at least 0.862 (v19 0.872 -
+   0.010); Image JevBench preview exact at least 35 of 60 (v19 38 - 3).
 4. **Nothing on text is lost:** JevBench at least 163, ECE at most 0.07, Brier at most
    0.36 (v19 167 / 0.052 / 0.342; the retrain noise is SD 3.2 tasks).
 
@@ -154,8 +150,9 @@ tower kept (no image training) is the image default, as measured under Why.
   (CLEVR scenes, geometry diagrams, paper figures) are the only other measure, and 60
   items resolve differences of about 10 points at best. The official Image JevBench
   is sealed; its public items are not downloadable.
-- **G-Acc on 1,900 groups resolves differences of about 0.02**; prediction 1's margin is
-  three times that.
+- **G-Acc on 300 groups resolves differences of about 0.03** (one standard error, about
+  0.027); prediction 1's margin is twice that. NaturalBench's other 1,600 groups are left
+  untouched as a reserve, not scored here.
 - **One seed.** The text retrain noise (SD 3.2 JevBench tasks) is known; the image
   noise is not.
 - **Mapika runs at 768 px and v19-vision at 448 px.** A gap could be resolution rather
